@@ -14,7 +14,7 @@ from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
 
 API_TOKEN = "5276253794:AAGgC9RfqOmlnTiiIwijpUaW9IK3X2RcNic"
 delay = 900
-config.DATABASE_URL = 'bolt://neo4j:neo4j@localhost:7687/users'
+config.DATABASE_URL = 'bolt://neo4j:12345@localhost:7687/users'
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -27,6 +27,24 @@ loop = asyncio.get_event_loop()
 #db = client['tgbot']
 #userdata = db['userdata']
 #users = db['users']
+
+class Url(StructuredNode):
+    # userid = StringProperty(unique_index=True, required=True)
+    url = StringProperty(index=True, required=True)
+
+    # car_url = StringProperty(index=True, required=True)
+
+
+class User(StructuredNode):
+    userid = StringProperty(unique_index=True, required=True)
+    subscribe = RelationshipTo(Url, 'SUBSCRIBE')
+
+
+class CarUrl(StructuredNode):
+    car_url = StringProperty(index=True, required=True)
+    parsed = RelationshipTo(Url, 'PARSED_FROM')
+    # traverse outgoing IS_FROM relations, inflate to Country objects
+    # country = RelationshipTo(Country, 'IS_FROM')
 
 choice = InlineKeyboardMarkup(row_width=2,
                               inline_keyboard=[
@@ -171,20 +189,4 @@ def my_callback():
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, on_startup=my_callback())
-
-
-
-
-
-
-class User(StructuredNode):
-    userid = StringProperty(unique_index=True, required=True)
-
-class UserData(StructuredNode):
-    userid = StringProperty(unique_index=True, required=True)
-    url = StringProperty(index=True, required=True)
-    car_url = StringProperty(index=True, required=True)
-
-    # traverse outgoing IS_FROM relations, inflate to Country objects
-    #country = RelationshipTo(Country, 'IS_FROM')
 
