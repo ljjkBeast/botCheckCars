@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup as BS
 from pymongo import MongoClient
 import aioschedule
 from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
-    UniqueIdProperty, RelationshipTo)
+    UniqueIdProperty, RelationshipTo, db)
 
 
 API_TOKEN = "5276253794:AAGgC9RfqOmlnTiiIwijpUaW9IK3X2RcNic"
@@ -41,9 +41,12 @@ choice = InlineKeyboardMarkup(row_width=2,
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    if User.get_userid != message.from_user.id:
+    #u = User()
+    #if str(u.userid) != str(message.from_user.id):
+    if User.userid != message.from_user.id:
     #if users.find_one({'userid': message.from_user.id}) is None:
         #save_user(message.from_user.id)
+        #User.create_or_update(userid = message.from_user.id)
         User(userid = message.from_user.id).save()
     await message.reply("Привет! Пришли мне ссылку вида https://cars.av.by/filter?brands[0][brand]=6&brands[0][model]=9&sort=4 чтобы я подобрал подходящие объявления.\n/help для более подробной инструкции.", disable_web_page_preview=True)
 
@@ -124,27 +127,25 @@ def remove_all_userdata(userid: str):
     #userdata.delete_many({'userid': userid})
 
 
-#async def check_updates():
-#    user_list = []
-#    user_list.append(User.userid)
-#    #user_list = users.find({})
-#    for user in user_list:
-#        ud = []
-#        ud.append(user(userid = User(userid = userid)))
-#        #user(userid = User(userid = userid))
-#        ud = userdata.find({'userid': user['userid']})
-#        cars = []
-#        urls = []
-#        for data in ud:
-#            cars.append(data['car_url'])
-#            #if data['ulr'] not in urls:
-#            urls.append(data['url'])
-#        for url in urls:
-#            for car in get_data(url):
-#                if car['link'] not in cars:
-#                    cars.append(car['link'])
-#                    userdata.insert_one({'userid': user['userid'], 'url': url, 'car_url': car['link']})
-#                    await notify_user(user['userid'], "Новое объявление! \n" + get_car_str(car))
+async def check_updates():
+    user_list = []
+    user_list.append(User.userid)
+    #user_list = users.find({})
+    for user in user_list:
+        #user(userid = User(userid = userid))
+        ud = userdata.find({'userid': user['userid']})
+        cars = []
+        urls = []
+        for data in ud:
+            cars.append(data['car_url'])
+            #if data['ulr'] not in urls:
+            urls.append(data['url'])
+        for url in urls:
+            for car in get_data(url):
+                if car['link'] not in cars:
+                    cars.append(car['link'])
+                    userdata.insert_one({'userid': user['userid'], 'url': url, 'car_url': car['link']})
+                    await notify_user(user['userid'], "Новое объявление! \n" + get_car_str(car))
 
 
 async def notify_user(userid: str, message: str):
@@ -157,7 +158,7 @@ def get_car_str(car: dict):
 
 
 async def my_func():
-    #await check_updates()
+    await check_updates()
     when_to_call = loop.time() + delay
     loop.call_at(when_to_call, my_callback)
 
@@ -176,7 +177,6 @@ if __name__ == '__main__':
 
 class User(StructuredNode):
     userid = StringProperty(unique_index=True, required=True)
-    get_userid = StringProperty(required=True, choices=userid)
 
 class UserData(StructuredNode):
     userid = StringProperty(unique_index=True, required=True)
