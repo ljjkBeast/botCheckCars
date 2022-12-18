@@ -39,6 +39,9 @@ class User(StructuredNode):
     userid = StringProperty(unique_index=True, required=True)
     subscribe = RelationshipTo(Url, 'SUBSCRIBE')
 
+    def test_funk (self):
+        a =  User.labels(self)
+        print(a)
 
 class CarUrl(StructuredNode):
     car_url = StringProperty(index=True, required=True)
@@ -61,13 +64,24 @@ choice = InlineKeyboardMarkup(row_width=2,
 async def send_welcome(message: types.Message):
     userids = []
     userids.append(db.cypher_query('MATCH (u: User) return u.userid'))
+    #u = db.cypher_query('MATCH (u: User) return u.userid')
+    #print(u)
+    #all_nodes = User.nodes.all()
+    #print(all_nodes)
+    #all_users = User.userid
+    #print(all_users)
+
+    print(labels(User.userid))
+    #a = User.userid.inherited_labels()
+    #print(a)
     #u = User()
     #if str(u.userid) != str(message.from_user.id):
-    if message.from_user.id not in userids:
+    if str(message.from_user.id) not in str(db.cypher_query('MATCH (u: User) return u.userid')):
     #if users.find_one({'userid': message.from_user.id}) is None:
         #save_user(message.from_user.id)
         #User.create_or_update(userid = message.from_user.id)
         User(userid = message.from_user.id).save()
+
     await message.reply("Привет! Пришли мне ссылку вида https://cars.av.by/filter?brands[0][brand]=6&brands[0][model]=9&sort=4 чтобы я подобрал подходящие объявления.\n/help для более подробной инструкции.", disable_web_page_preview=True)
 
 @dp.message_handler(commands=['help'])
@@ -137,7 +151,12 @@ def save_user(userid: str):
 
 
 def save_userdata(userid: str, url: str, car_url: str):
-    UserData(userid = userid, url = url, car_url = car_url).save()
+    user = User(userid = userid).create_or_update()
+    u = Url(url = url).create_or_update()
+    car = CarUrl(car_url = car_url).create_or_update()
+    user.subscribe.connect(u)
+    car.parsed.connect(u)
+    #UserData(userid = userid, url = url, car_url = car_url).save()
     #userdata.insert_one({'userid': userid, 'url': url, 'car_url': car_url})
 
 
@@ -148,8 +167,8 @@ def remove_all_userdata(userid: str):
 
 
 async def check_updates():
-    user_list = []
-    user_list.append(User.userid)
+    #user_list = []
+    user_list = User.userid
     #user_list = users.find({})
     for user in user_list:
         #user(userid = User(userid = userid))
