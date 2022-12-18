@@ -14,7 +14,7 @@ from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
 
 API_TOKEN = "5276253794:AAGgC9RfqOmlnTiiIwijpUaW9IK3X2RcNic"
 delay = 900
-config.DATABASE_URL = 'bolt://neo4j:neo4j@localhost:7687'
+config.DATABASE_URL = 'bolt://neo4j:neo4j@localhost:7687/users'
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -41,9 +41,11 @@ choice = InlineKeyboardMarkup(row_width=2,
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
+    userids = []
+    userids.append(db.cypher_query('MATCH (u: User) return u.userid'))
     #u = User()
     #if str(u.userid) != str(message.from_user.id):
-    if User.userid != message.from_user.id:
+    if message.from_user.id not in userids:
     #if users.find_one({'userid': message.from_user.id}) is None:
         #save_user(message.from_user.id)
         #User.create_or_update(userid = message.from_user.id)
