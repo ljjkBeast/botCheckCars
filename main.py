@@ -29,10 +29,9 @@ dp = Dispatcher(bot)
 loop = asyncio.get_event_loop()
 
 def checkUserTx():
-
-        with driver.session(database="users") as session:
-            users = session.execute_read(checkUser)
-        return users
+    with driver.session(database="users") as session:
+        users = session.execute_read(checkUser)
+    return users
 
 def checkUser(tx):
     result = tx.run(
@@ -102,25 +101,6 @@ async def return_car_data(message: types.Message):
             await message.answer(get_car_str(car), disable_web_page_preview=True, parse_mode='html')
         await message.answer('Рассылка включена, я отправлю новые объявления как только они появятся.')
 
-def save_url_tx(userid: str, url: str):
-    with driver.session(database="users") as session:
-        session.execute_write(save_url, userid, url)
-
-def save_url(tx, userid: str, url: str):
-    tx.run("MATCH (a:User) WHERE a.userid = $userid "
-           "MERGE (u:Url {url: $url})<-[:SUBSCRIBED]- (a) ",
-           userid=userid, url=url)
-
-def save_car_tx(url: str, car_url: str):
-    with driver.session(database="users") as session:
-        session.execute_write(save_car, url, car_url)
-
-def save_car(tx, url: str, car_url: str):
-    tx.run("MATCH (u:Url) WHERE u.url = $url "
-           "MERGE (u)<-[:PARSED]- (c:CarUrl {car_url: $car_url}) ",
-           car_url=car_url, url=url)
-
-
 def get_data(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -132,13 +112,16 @@ def get_data(url):
     cars = []
 
     for item in items:
+        #discr = item.find('div', class_='listing-item__message').get_text(strip=True))
+        #if len(discr) > 200:
+
         cars.append({
             'title': item.find('a', class_='listing-item__link').get_text(strip=True),
             'price': item.find('div', class_='listing-item__priceusd').get_text(strip=True),
             'location': item.find('div', class_='listing-item__location').get_text(strip=True),
             'params': text_fix(item.find('div', class_='listing-item__params').get_text(strip=True)),
-            'link': item.find('a', class_='listing-item__link').get('href'),
-            'description': item.find('div', class_='listing-item__message').get_text(strip=True)
+            'link': item.find('a', class_='listing-item__link').get('href')
+            #'description': item.find('div', class_='listing-item__message').get_text(strip=True)
         })
     return cars[:5]
 
@@ -172,32 +155,12 @@ def text_fix(text):
            "CREATE (c)-[:PARSED]->(u:Url {url: $url})",
            userid=userid, url=url, car_url=car_url'''
 
-def remove_all_userdata_tx(userid :str):
-    with driver.session(database="users") as session:
-        session.execute_write(remove_all_userdata, userid)
-
-def remove_all_userdata(tx, userid: str):
-    #tx.run("MATCH (a:User {userid: $userid}) DETACH DELETE a ",
-    #       userid=userid)
-    tx.run("MATCH (n{userid: $userid})-[r: SUBSCRIBED]->() DELETE r ",
-           userid=userid)
-
-
 async def check_updates():
     user_list = checkUserTx()
-    #u = str(user_list)
+
     for user in user_list:
-        #user(userid = User(userid = userid))
-        #urls = []
 
-        #ud = userdata.find({'userid': user['userid']})
-        #сюда запилить ссылки на объявы конкретного юзера
-        urls = get_urls_from_user_tx(user)#сюда запилить ссылки на подписки конкретного юзера
-        #for data in ud:
-        #    cars.append(data['car_url'])
-        #    #if data['ulr'] not in urls:
-        #    urls.append(data['url'])
-
+        urls = get_urls_from_user_tx(user)
 
         for url in urls:
             cars = get_cars_tx(url)
@@ -206,8 +169,6 @@ async def check_updates():
                     cars.append(car['link'])
                     save_url_tx(user, url)
                     save_car_tx(url, car['link'])
-                    #save_userdata_tx(user, url, car['link'])
-                    #userdata.insert_one({'userid': user['userid'], 'url': url, 'car_url': car['link']})
                     await notify_user(user, "Новое объявление! \n" + get_car_str(car))
 
 
@@ -221,15 +182,6 @@ def get_car_str(car: dict):
            + f'<a href="{"cars.av.by" + car["link"]}">Смотреть объявление на сайте</a>\n\n'
 
 
-async def my_func():
-    await check_updates()
-    when_to_call = loop.time() + delay
-    loop.call_at(when_to_call, my_callback)
-
-
-def my_callback():
-    asyncio.ensure_future(my_func())
-
 def get_urls_from_user_tx(userid: str):
     with driver.session(database="users") as session:
         urls = session.execute_read(get_urls_from_user, userid)
@@ -240,8 +192,6 @@ def get_urls_from_user(tx, userid: str):
     #urls = list(result)
     urls = result.value()
     return urls
-
-
 
 def get_cars_tx(url: str):
     with driver.session(database="users") as session:
@@ -254,12 +204,48 @@ def get_cars(tx, url:str):
     cars = result.value()
     return cars
 
+def save_url_tx(userid: str, url: str):
+    with driver.session(database="users") as session:
+        session.execute_write(save_url, userid, url)
+
+def save_url(tx, userid: str, url: str):
+    tx.run("MATCH (a:User) WHERE a.userid = $userid "
+           "MERGE (u:Url {url: $url})<-[:SUBSCRIBED]- (a) ",
+           userid=userid, url=url)
+
+def save_car_tx(url: str, car_url: str):
+    with driver.session(database="users") as session:
+        session.execute_write(save_car, url, car_url)
+
+def save_car(tx, url: str, car_url: str):
+    tx.run("MATCH (u:Url) WHERE u.url = $url "
+           "MERGE (u)<-[:PARSED]- (c:CarUrl {car_url: $car_url}) ",
+           car_url=car_url, url=url)
+
+def remove_all_userdata_tx(userid :str):
+    with driver.session(database="users") as session:
+        session.execute_write(remove_all_userdata, userid)
+
+def remove_all_userdata(tx, userid: str):
+    #tx.run("MATCH (a:User {userid: $userid}) DETACH DELETE a ",
+    #       userid=userid)
+    tx.run("MATCH (n{userid: $userid})-[r: SUBSCRIBED]->() DELETE r ",
+           userid=userid)
+
 #def add_car_to_user_tx(userid: str, url: str, car_url: str):
 #    with driver.session(database="users") as session:
 #        session.execute_write(add_car_to_user, userid, url, car_url)
 
 #def add_car_to_user(tx, userid: str, url: str, car_url: str):
 #    tx.run()
+async def my_func():
+    await check_updates()
+    when_to_call = loop.time() + delay
+    loop.call_at(when_to_call, my_callback)
+
+
+def my_callback():
+    asyncio.ensure_future(my_func())
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, on_startup=my_callback())
