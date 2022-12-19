@@ -62,8 +62,8 @@ choice = InlineKeyboardMarkup(row_width=2,
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
-    userids = []
-    userids.append(db.cypher_query('MATCH (u: User) return u.userid'))
+    #userids = []
+    #userids.append(db.cypher_query('MATCH (u: User) return u.userid'))
     #u = db.cypher_query('MATCH (u: User) return u.userid')
     #print(u)
     #all_nodes = User.nodes.all()
@@ -71,7 +71,7 @@ async def send_welcome(message: types.Message):
     #all_users = User.userid
     #print(all_users)
 
-    print(labels(User.userid))
+    #print(labels(User.userid))
     #a = User.userid.inherited_labels()
     #print(a)
     #u = User()
@@ -151,9 +151,9 @@ def save_user(userid: str):
 
 
 def save_userdata(userid: str, url: str, car_url: str):
-    user = User(userid = userid).create_or_update()
-    u = Url(url = url).create_or_update()
-    car = CarUrl(car_url = car_url).create_or_update()
+    user = User(userid = userid).refresh()
+    u = Url(url = url).save()
+    car = CarUrl(car_url = car_url).save()
     user.subscribe.connect(u)
     car.parsed.connect(u)
     #UserData(userid = userid, url = url, car_url = car_url).save()
@@ -162,7 +162,7 @@ def save_userdata(userid: str, url: str, car_url: str):
 
 def remove_all_userdata(userid: str):
     #UserData.nodes.delete(ueserid = userid)
-    UserData(userid = userid).delete()
+    User(userid = userid).delete()
     #userdata.delete_many({'userid': userid})
 
 
@@ -197,7 +197,7 @@ def get_car_str(car: dict):
 
 
 async def my_func():
-    await check_updates()
+    #await check_updates()
     when_to_call = loop.time() + delay
     loop.call_at(when_to_call, my_callback)
 
