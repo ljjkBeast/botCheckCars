@@ -10,11 +10,19 @@ from pymongo import MongoClient
 import aioschedule
 from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
     UniqueIdProperty, RelationshipTo, db)
+from neo4j import GraphDatabase
 
 
 API_TOKEN = "5276253794:AAGgC9RfqOmlnTiiIwijpUaW9IK3X2RcNic"
 delay = 900
-config.DATABASE_URL = 'bolt://neo4j:12345@localhost:7687/users'
+#config.DATABASE_URL = 'bolt://neo4j:12345@localhost:7687/users'
+URI = "bolt://localhost:7687"
+#AUTH = ("neo4j", "12345")
+driver = GraphDatabase.driver(URI, auth=("neo4j", "12345"))
+print("connected: {}".format(driver.verify_connectivity()))
+#with GraphDatabase.driver(URI, auth=AUTH) as driver:
+#    driver.verify_connectivity()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -28,24 +36,46 @@ loop = asyncio.get_event_loop()
 #userdata = db['userdata']
 #users = db['users']
 
-class Url(StructuredNode):
+def checkUserTx():
+    #global URI, AUTH
+    #with GraphDatabase.driver(URI, auth=AUTH) as driver:
+        with driver.session(database="users") as session:
+            records = session.execute_read(checkUser)
+        return records
+
+def checkUser(tx):
+    result = tx.run(
+        "MATCH (n:User) RETURN n.userid")
+    records = list(result)
+    return records
+
+def create_user_tx(userid: str):
+    with driver.session(database="users") as session:
+        session.execute_write(create_user, userid)
+
+def create_user(tx, userid: str):
+    tx.run("MERGE (u:User {userid: $userid})",
+           userid=userid)
+
+
+#class Url(StructuredNode):
     # userid = StringProperty(unique_index=True, required=True)
-    url = StringProperty(index=True, required=True)
+#    url = StringProperty(index=True, required=True)
 
     # car_url = StringProperty(index=True, required=True)
 
 
-class User(StructuredNode):
-    userid = StringProperty(unique_index=True, required=True)
-    subscribe = RelationshipTo(Url, 'SUBSCRIBE')
+#class User(StructuredNode):
+#    userid = StringProperty(unique_index=True, required=True)
+#    subscribe = RelationshipTo(Url, 'SUBSCRIBE')
 
-    def test_funk (self):
-        a =  User.labels(self)
-        print(a)
+#    def test_funk (self):
+#        a =  User.labels(self)
+#        print(a)
 
-class CarUrl(StructuredNode):
-    car_url = StringProperty(index=True, required=True)
-    parsed = RelationshipTo(Url, 'PARSED_FROM')
+#class CarUrl(StructuredNode):
+#    car_url = StringProperty(index=True, required=True)
+#    parsed = RelationshipTo(Url, 'PARSED_FROM')
     # traverse outgoing IS_FROM relations, inflate to Country objects
     # country = RelationshipTo(Country, 'IS_FROM')
 
@@ -70,17 +100,18 @@ async def send_welcome(message: types.Message):
     #print(all_nodes)
     #all_users = User.userid
     #print(all_users)
-
+    users = checkUserTx()
     #print(labels(User.userid))
     #a = User.userid.inherited_labels()
     #print(a)
     #u = User()
     #if str(u.userid) != str(message.from_user.id):
-    if str(message.from_user.id) not in str(db.cypher_query('MATCH (u: User) return u.userid')):
+    if message.from_user.id not in users:
     #if users.find_one({'userid': message.from_user.id}) is None:
         #save_user(message.from_user.id)
         #User.create_or_update(userid = message.from_user.id)
-        User(userid = message.from_user.id).save()
+        create_user_tx(message.from_user.id)
+        #session.execute_write(create_user, message.from_user.id)
 
     await message.reply("Привет! Пришли мне ссылку вида https://cars.av.by/filter?brands[0][brand]=6&brands[0][model]=9&sort=4 чтобы я подобрал подходящие объявления.\n/help для более подробной инструкции.", disable_web_page_preview=True)
 
