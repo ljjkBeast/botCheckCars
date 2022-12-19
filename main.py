@@ -8,8 +8,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bs4 import BeautifulSoup as BS
 from pymongo import MongoClient
 import aioschedule
-from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
-    UniqueIdProperty, RelationshipTo, db)
+#from neomodel import (config, StructuredNode, StringProperty, IntegerProperty,
+#   UniqueIdProperty, RelationshipTo, db)
 from neo4j import GraphDatabase
 
 
@@ -20,6 +20,7 @@ URI = "bolt://localhost:7687"
 #AUTH = ("neo4j", "12345")
 driver = GraphDatabase.driver(URI, auth=("neo4j", "12345"))
 print("connected: {}".format(driver.verify_connectivity()))
+
 #with GraphDatabase.driver(URI, auth=AUTH) as driver:
 #    driver.verify_connectivity()
 
@@ -128,7 +129,7 @@ async def send_welcome(message: types.Message):
 
 @dp.callback_query_handler(lambda c: c.data.startswith('cancel'))
 async def cancel(callback: types.CallbackQuery):
-    remove_all_userdata(callback.from_user.id)
+    remove_all_userdata_tx(callback.from_user.id)
     await callback.message.answer('Вы успешно отписались!')
     await callback.answer()
 
@@ -141,7 +142,7 @@ async def return_car_data(message: types.Message):
     elif len(data) != 0:
         await message.answer('Последние ' + str(len(data)) + ' объявлений по вашему фильтру:')
         for car in data:
-            save_userdata(message.from_user.id, str(message.text), car['link'])
+            save_userdata_tx(message.from_user.id, str(message.text), car['link'])
             await message.answer(get_car_str(car), disable_web_page_preview=True, parse_mode='html')
         await message.answer('Рассылка включена, я отправлю новые объявления как только они появятся.')
 
@@ -176,45 +177,65 @@ def text_fix(text):
         #    text = text[:i + 1] + ' ' + text[i + 1:]
     return text
 
-def save_user(userid: str):
-    User(userid = userid).save()
-    #users.insert_one({'userid': userid})
+#def save_user(userid: str):
+#    User(userid = userid).save()
+#    #users.insert_one({'userid': userid})
 
 
-def save_userdata(userid: str, url: str, car_url: str):
-    user = User(userid = userid).refresh()
-    u = Url(url = url).save()
-    car = CarUrl(car_url = car_url).save()
-    user.subscribe.connect(u)
-    car.parsed.connect(u)
+def save_userdata_tx(userid: str, url: str, car_url: str):
+    with driver.session(database="users") as session:
+        session.execute_write(save_userdata, userid, url, car_url)
+    #user = User(userid = userid).refresh()
+    #u = Url(url = url).save()
+    #car = CarUrl(car_url = car_url).save()
+    #user.subscribe.connect(u)
+    #car.parsed.connect(u)
     #UserData(userid = userid, url = url, car_url = car_url).save()
     #userdata.insert_one({'userid': userid, 'url': url, 'car_url': car_url})
 
+def save_userdata(tx, userid: str, url: str, car_url: str):
+    tx.run("MATCH (a:User) WHERE a.userid = $userid "
+           "MATCH (u:Url) WHERE u.url = $url "
+           "CREATE (a)-[:SUBSCRIBED]->(u:Url {url: $url}) "
+           "MATCH (c:CarUrl) WHERE c.car_url = $car_url "
+           "CREATE (c)-[:PARSED]->(u:Url {url: $url})",
+           userid=userid, url=url, car_url=car_url)
 
-def remove_all_userdata(userid: str):
-    #UserData.nodes.delete(ueserid = userid)
-    User(userid = userid).delete()
-    #userdata.delete_many({'userid': userid})
+def remove_all_userdata_tx(userid :str):
+    with driver.session(database="users") as session:
+        session.execute_write(remove_all_userdata_tx, userid)
+
+def remove_all_userdata(tx, userid: str):
+    #tx.run("MATCH (a:User {userid: $userid}) DETACH DELETE a ",
+    #       userid=userid)
+    tx.run("MATCH (n{userid: $userid})-[r: SUBSCRIBED]->() DELETE r ",
+           userid=userid)
 
 
 async def check_updates():
     #user_list = []
-    user_list = User.userid
+    user_list = checkUserTx()
     #user_list = users.find({})
     for user in user_list:
         #user(userid = User(userid = userid))
-        ud = userdata.find({'userid': user['userid']})
-        cars = []
         urls = []
-        for data in ud:
-            cars.append(data['car_url'])
-            #if data['ulr'] not in urls:
-            urls.append(data['url'])
+
+        #ud = userdata.find({'userid': user['userid']})
+        #сюда запилить ссылки на объявы конкретного юзера
+        urls = get_urls_from_user_tx(user)#сюда запилить ссылки на подписки конкретного юзера
+        #for data in ud:
+        #    cars.append(data['car_url'])
+        #    #if data['ulr'] not in urls:
+        #    urls.append(data['url'])
+
+
         for url in urls:
+            cars = get_cars_tx(url)
             for car in get_data(url):
                 if car['link'] not in cars:
                     cars.append(car['link'])
-                    userdata.insert_one({'userid': user['userid'], 'url': url, 'car_url': car['link']})
+                    add_car_to_user_tx(user['userid'], url, car['link'])
+                    #userdata.insert_one({'userid': user['userid'], 'url': url, 'car_url': car['link']})
                     await notify_user(user['userid'], "Новое объявление! \n" + get_car_str(car))
 
 
@@ -236,6 +257,32 @@ async def my_func():
 def my_callback():
     asyncio.ensure_future(my_func())
 
+def get_urls_from_user_tx(userid: str):
+    with driver.session(database="users") as session:
+        urls = session.execute_read(get_urls_from_user, userid)
+    return urls
+
+def get_urls_from_user(tx, userid: str):
+    result = tx.run("MATCH (n:User {userid: $userid})-[:SUBSCRIBED]->(u:Url) RETURN u.url ", userid=userid)
+    urls = list(result)
+    return urls
+
+def get_cars_tx(url: str):
+    with driver.session(database="users") as session:
+        cars = session.execute_read(get_cars, url)
+    return cars
+
+def get_cars(tx, url:str):
+    result = tx.run("MATCH (c:CarUrl)-[:PARSED]->(u:Url {url: $url}) RETURN c.car_url ", url=url)
+    cars = list(result)
+    return cars
+
+def add_car_to_user_tx(userid: str, url: str, car_url: str):
+    with driver.session(database="users") as session:
+        session.execute_write(add_car_to_user, userid, url, car_url)
+
+def add_car_to_user(tx, userid: str, url: str, car_url: str):
+    tx.run()
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, on_startup=my_callback())
