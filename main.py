@@ -31,14 +31,15 @@ loop = asyncio.get_event_loop()
 def checkUserTx():
 
         with driver.session(database="users") as session:
-            records = session.execute_read(checkUser)
-        return records
+            users = session.execute_read(checkUser)
+        return users
 
 def checkUser(tx):
     result = tx.run(
         "MATCH (n:User) RETURN n.userid")
-    records = list(result)
-    return records
+    value = result.value()
+    #users = list(result)
+    return value
 
 def create_user_tx(userid: str):
     with driver.session(database="users") as session:
@@ -183,6 +184,7 @@ def remove_all_userdata(tx, userid: str):
 
 async def check_updates():
     user_list = checkUserTx()
+    #u = str(user_list)
     for user in user_list:
         #user(userid = User(userid = userid))
         #urls = []
@@ -232,8 +234,9 @@ def get_urls_from_user_tx(userid: str):
     return urls
 
 def get_urls_from_user(tx, userid: str):
-    result = tx.run("MATCH (n:User {userid: $userid})-[:SUBSCRIBED]->(u:Url {url: $url}) RETURN u.url ", userid=userid)
+    result = tx.run("MATCH (n:User {userid: $userid})-[:SUBSCRIBED]->(u:Url) RETURN u.url ", userid=userid)
     urls = list(result)
+    urls = result.value()
     return urls
 
 
@@ -246,14 +249,15 @@ def get_cars_tx(url: str):
 def get_cars(tx, url:str):
     result = tx.run("MATCH (c:CarUrl)-[:PARSED]->(u:Url {url: $url}) RETURN c.car_url ", url=url)
     cars = list(result)
+    cars = result.value()
     return cars
 
-def add_car_to_user_tx(userid: str, url: str, car_url: str):
-    with driver.session(database="users") as session:
-        session.execute_write(add_car_to_user, userid, url, car_url)
+#def add_car_to_user_tx(userid: str, url: str, car_url: str):
+#    with driver.session(database="users") as session:
+#        session.execute_write(add_car_to_user, userid, url, car_url)
 
-def add_car_to_user(tx, userid: str, url: str, car_url: str):
-    tx.run()
+#def add_car_to_user(tx, userid: str, url: str, car_url: str):
+#    tx.run()
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True, on_startup=my_callback())
