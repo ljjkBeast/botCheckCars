@@ -113,7 +113,7 @@ def save_url(tx, userid: str, url: str):
 
 def save_car_tx(url: str, car_url: str):
     with driver.session(database="users") as session:
-        session.execute_write(save_url, url, car_url)
+        session.execute_write(save_car, url, car_url)
 
 def save_car(tx, url: str, car_url: str):
     tx.run("MATCH (u:Url) WHERE u.url = $url "
@@ -137,7 +137,8 @@ def get_data(url):
             'price': item.find('div', class_='listing-item__priceusd').get_text(strip=True),
             'location': item.find('div', class_='listing-item__location').get_text(strip=True),
             'params': text_fix(item.find('div', class_='listing-item__params').get_text(strip=True)),
-            'link': item.find('a', class_='listing-item__link').get('href')
+            'link': item.find('a', class_='listing-item__link').get('href'),
+            'description': item.find('div', class_='listing-item__message').get_text(strip=True)
         })
     return cars[:5]
 
@@ -173,7 +174,7 @@ def text_fix(text):
 
 def remove_all_userdata_tx(userid :str):
     with driver.session(database="users") as session:
-        session.execute_write(remove_all_userdata_tx, userid)
+        session.execute_write(remove_all_userdata, userid)
 
 def remove_all_userdata(tx, userid: str):
     #tx.run("MATCH (a:User {userid: $userid}) DETACH DELETE a ",
@@ -207,7 +208,7 @@ async def check_updates():
                     save_car_tx(url, car['link'])
                     #save_userdata_tx(user, url, car['link'])
                     #userdata.insert_one({'userid': user['userid'], 'url': url, 'car_url': car['link']})
-                    await notify_user(user['userid'], "Новое объявление! \n" + get_car_str(car))
+                    await notify_user(user, "Новое объявление! \n" + get_car_str(car))
 
 
 async def notify_user(userid: str, message: str):
@@ -216,7 +217,8 @@ async def notify_user(userid: str, message: str):
 
 def get_car_str(car: dict):
     return car['title'] + '\nЦена: ' + car['price'] + "\nГород: " + car['location'] + "\nИнфо: " + car['params'] \
-           + "\n\n" + f'<a href="{"cars.av.by" + car["link"]}">Смотреть объявление на сайте</a>\n\n'
+           + "\nОписание: " + car['description'] + "\n\n" \
+           + f'<a href="{"cars.av.by" + car["link"]}">Смотреть объявление на сайте</a>\n\n'
 
 
 async def my_func():
@@ -235,7 +237,7 @@ def get_urls_from_user_tx(userid: str):
 
 def get_urls_from_user(tx, userid: str):
     result = tx.run("MATCH (n:User {userid: $userid})-[:SUBSCRIBED]->(u:Url) RETURN u.url ", userid=userid)
-    urls = list(result)
+    #urls = list(result)
     urls = result.value()
     return urls
 
@@ -248,7 +250,7 @@ def get_cars_tx(url: str):
 
 def get_cars(tx, url:str):
     result = tx.run("MATCH (c:CarUrl)-[:PARSED]->(u:Url {url: $url}) RETURN c.car_url ", url=url)
-    cars = list(result)
+    #cars = list(result)
     cars = result.value()
     return cars
 
